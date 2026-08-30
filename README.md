@@ -19,7 +19,8 @@ pip install -e .[plot]      # + matplotlib for convergence plots
 python -m gdviz
 # {
 #   "gradient_descent": {"final_x": 0.0, "iterations": 40},
-#   "newton":           {"final_x": 0.0, "iterations": 3}
+#   "gd_momentum_0.9":  {"final_x": 0.0, "iterations": 2},
+#   "newton":           {"final_x": 0.0, "iterations": 1}
 # }
 ```
 
@@ -32,14 +33,16 @@ python -m gdviz.plot
 
 ## What's here
 
-- `gdviz/optim.py` — `gradient_descent`, `newton`, plus polynomial bowl helpers
+- `gdviz/optim.py` — `gradient_descent` (with optional momentum/velocity), `newton`, plus polynomial bowl helpers
 - `gdviz/plot.py` — optional convergence plotting (gracefully skipped without matplotlib)
 
 ## Notes
 
-Newton's method uses the second derivative and typically converges in 2–4 steps on
-these problems, versus dozens for plain gradient descent — a good concrete demo of
-why second-order information is expensive but powerful.
+Momentum (velocity SGD) damps the oscillation plain descent shows on steep bowls and
+cuts iteration count — but second-order info still wins. Newton's method uses the
+second derivative and typically converges in 2–4 steps on these problems, versus
+dozens for plain gradient descent — a good concrete demo of why second-order
+information is expensive but powerful.
 
 ## Tests
 

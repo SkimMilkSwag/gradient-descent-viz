@@ -11,15 +11,21 @@ def grad_quadratic(x, b=0.0):
     return 2.0 * x + b
 
 
-def gradient_descent(f, df, x0, lr=0.1, steps=50, tol=1e-8):
-    """Run gradient descent, recording the full trajectory. Returns (x, history)."""
+def gradient_descent(f, df, x0, lr=0.1, steps=50, tol=1e-8, momentum=0.0):
+    """Run (momentum) gradient descent, recording the full trajectory.
+
+    With momentum > 0 this is Polyak heavy-ball (SGD with velocity):
+    v = momentum * v - lr * grad, x += v. Returns (x, history).
+    """
     x = float(x0)
+    v = 0.0
     history = [x]
     for _ in range(steps):
         g = df(x)
         if abs(g) < tol:
             break
-        x -= lr * g
+        v = momentum * v - lr * g
+        x += v
         history.append(x)
     return x, history
 
