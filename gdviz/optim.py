@@ -46,6 +46,35 @@ def newton(f, df, d2f, x0, steps=30, tol=1e-8):
     return x, history
 
 
+def adam(f, df, x0, lr=0.1, steps=50, tol=1e-8,
+         beta1=0.9, beta2=0.999, eps=1e-8):
+    """Adam (Kingma & Ba 2014) implemented from scratch for the scalar bowl.
+
+    m = beta1*m + (1-beta1)*g;  v = beta2*v + (1-beta2)*g^2
+    mhat = m/(1-beta1^t);       vhat = v/(1-beta2^t)
+    x -= lr * mhat / (sqrt(vhat) + eps)
+
+    Records the full trajectory like gradient_descent. Returns (x, history).
+    """
+    x = float(x0)
+    m = 0.0
+    v = 0.0
+    t = 0
+    history = [x]
+    for _ in range(steps):
+        g = df(x)
+        if abs(g) < tol:
+            break
+        t += 1
+        m = beta1 * m + (1 - beta1) * g
+        v = beta2 * v + (1 - beta2) * g * g
+        m_hat = m / (1 - beta1 ** t)
+        v_hat = v / (1 - beta2 ** t)
+        x -= lr * m_hat / (np.sqrt(v_hat) + eps)
+        history.append(x)
+    return x, history
+
+
 def poly_bowl(x, coeffs):
     """Evaluate a polynomial sum(coeffs[i] * x**i)."""
     return sum(c * x ** i for i, c in enumerate(coeffs))
