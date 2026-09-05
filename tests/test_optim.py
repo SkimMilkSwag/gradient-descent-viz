@@ -1,6 +1,17 @@
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from gdviz.optim import adam, gradient_descent, newton, grad_quadratic
+import numpy as np
+from gdviz.optim import (
+    adam,
+    gradient_descent,
+    newton,
+    grad_quadratic,
+    gradient_descent_vec,
+    newton_vec,
+    rosenbrock,
+    grad_rosenbrock,
+    hess_rosenbrock,
+)
 
 
 def test_adam_converges_to_zero():
@@ -71,3 +82,70 @@ def test_newton_faster():
 def test_newton_converges():
     x, _ = newton(lambda x: x ** 2, lambda x: 2 * x, lambda x: 2.0, x0=5.0)
     assert abs(x) < 1e-6
+
+
+# --- Rosenbrock 2D -----------------------------------------------------------
+
+def test_rosenbrock_value_and_minimum():
+    # f(1, 1) = 0 is the global minimum; values elsewhere are positive
+    assert rosenbrock(np.array([1.0, 1.0])) == 0.0
+    assert rosenbrock(np.array([-1.0, 2.0])) > 0.0
+    # known reference value: f(0, 0) = (1-0)^2 + 100*(0-0)^2 = 1
+    assert rosenbrock(np.array([0.0, 0.0])) == 1.0
+
+
+def test_rosenbrock_gradient_matches_finite_difference():
+    # central-difference check of the analytic gradient at a few points
+    h = 1e-6
+    for pt in [np.array([-1.0, 2.0]), np.array([0.5, -0.3]), np.array([1.2, 0.8])]:
+        g = grad_rosenbrock(pt)
+        num = np.zeros(2)
+        for i in range(2):
+            e = np.zeros(2)
+            e[i] = h
+            num[i] = (rosenbrock(pt + e) - rosenbrock(pt - e)) / (2 * h)
+        assert np.allclose(g, num, atol=1e-5), (pt, g, num)
+
+
+def test_rosenbrock_hessian_matches_fd():
+    # Hessian entries checked against central-difference gradients
+    h = 1e-5
+    for pt in [np.array([-0.4, 1.6]), np.array([0.7, 1.9])]:
+        H = hess_rosenbrock(pt)
+        for i in range(2):
+            e_i = np.zeros(2)
+            e_i[i] = h
+            g_plus = grad_rosenbrock(pt + e_i)
+            g_minus = grad_rosenbrock(pt - e_i)
+            for j in range(2):
+                H_ij = (g_plus[j] - g_minus[j]) / (2 * h)
+                assert abs(H[i, j] - H_ij) < 1e-3, (pt, i, j, H[i, j], H_ij)
+
+
+def test_gd_vec_converges_on_rosenbrock():
+    x, hist = gradient_descent_vec(rosenbrock, grad_rosenbrock, [-1.2, 1.0], lr=0.001, steps=20000)
+    assert np.allclose(x, [1.0, 1.0], atol=1e-3)
+    assert len(hist) > 100  # the valley floor is slow going
+
+
+def test_momentum_vec_beats_plain_gd_on_rosenbrock():
+    # Same lr; momentum should need fewer iterations to reach tol on the
+    # Rosenbrock valley (it carries through the shallow, curved sections).
+    _, gd = gradient_descent_vec(rosenbrock, grad_rosenbrock, [-1.2, 1.0], lr=0.001, steps=30000)
+    _, mom = gradient_descent_vec(rosenbrock, grad_rosenbrock, [-1.2, 1.0], lr=0.001, momentum=0.9, steps=30000)
+    assert len(mom) - 1 < len(gd) - 1
+
+
+def test_gd_vec_stops_on_divergence():
+    # A learning rate past the stability bound sends Rosenbrock off to
+    # infinity; the runner must break on non-finite gradient, not loop forever.
+    x, hist = gradient_descent_vec(rosenbrock, grad_rosenbrock, [-1.0, 2.0], lr=0.01, steps=1000)
+    assert len(hist) < 1000  # stopped early rather than burning all steps
+
+
+def test_newton_vec_converges_fast_on_rosenbrock():
+    # Newton with the analytic Hessian should land on (1,1) in a handful of
+    # iterations even from a distant start.
+    x, hist = newton_vec(rosenbrock, grad_rosenbrock, hess_rosenbrock, [0.5, -0.5], steps=50)
+    assert np.allclose(x, [1.0, 1.0], atol=1e-6)
+    assert len(hist) - 1 <= 15

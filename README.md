@@ -18,9 +18,17 @@ pip install -e .[plot]      # + matplotlib for convergence plots
 ```bash
 python -m gdviz
 # {
-#   "gradient_descent": {"final_x": 0.0, "iterations": 40},
-#   "gd_momentum_0.9":  {"final_x": 0.0, "iterations": 2},
-#   "newton":           {"final_x": 0.0, "iterations": 1}
+#   "quadratic_bowl": {
+#     "gradient_descent": {"final_x": 0.0, "iterations": 40},
+#     "gd_momentum_0.9":  {"final_x": 0.0, "iterations": 2},
+#     "newton":           {"final_x": 0.0, "iterations": 1}
+#   },
+#   "rosenbrock_2d": {
+#     "start": [-1.2, 1.0],
+#     "gradient_descent": {"final_xy": [0.9999, 0.9997], "iterations": 30000},
+#     "gd_momentum_0.9":  {"final_xy": [1.0, 1.0], "iterations": 4128},
+#     "newton":           {"final_xy": [1.0, 1.0], "iterations": 5}
+#   }
 # }
 ```
 
@@ -33,7 +41,7 @@ python -m gdviz.plot
 
 ## What's here
 
-- `gdviz/optim.py` — `gradient_descent` (with optional momentum/velocity), `newton`, plus polynomial bowl helpers
+- `gdviz/optim.py` — scalar `gradient_descent` (with optional momentum/velocity), `newton`, plus polynomial bowl helpers; vector `gradient_descent_vec` / `newton_vec`; and the 2D **Rosenbrock** benchmark (`rosenbrock`, `grad_rosenbrock`, `hess_rosenbrock`)
 - `gdviz/plot.py` — optional convergence plotting (gracefully skipped without matplotlib)
 
 ## Notes
@@ -43,6 +51,13 @@ cuts iteration count — but second-order info still wins. Newton's method uses 
 second derivative and typically converges in 2–4 steps on these problems, versus
 dozens for plain gradient descent — a good concrete demo of why second-order
 information is expensive but powerful.
+
+The Rosenbrock function is the non-convex stress test: its narrow curved valley
+makes plain gradient descent crawl (30k+ iterations to the default tolerance from
+`[-1.2, 1.0]`), momentum cuts that to ~4k, and Newton with the analytic Hessian
+lands on `(1, 1)` in five. The vector runners stop early when a diverging
+trajectory produces a non-finite gradient, so a bad learning rate can't burn
+through all `steps`.
 
 ## Tests
 
