@@ -161,3 +161,41 @@ def hess_rosenbrock(x, a=1.0, b=100.0):
     x, y = float(x[0]), float(x[1])
     return np.array([[12.0 * b * x * x - 4.0 * b * y + 2.0, -4.0 * b * x],
                      [-4.0 * b * x, 2.0 * b]])
+
+
+def converged_at_tol(x_final, x_opt):
+    """True when the final state sits within 1e-6 of the optimum coordinate-wise."""
+    return bool(np.allclose(np.asarray(x_final, dtype=float),
+                            np.asarray(x_opt, dtype=float), atol=1e-6))
+
+
+def benchmark(df, optim, x0, x_opt, tol=1e-6, steps=100000, **kw):
+    """Run ``optim`` from ``x0`` and report the convergence benchmark.
+
+    ``df`` is the gradient function passed as the optimizer's second
+    positional argument. Returns ``(iters, converged)``: ``iters`` is the
+    number of accepted steps (the optimizer's recorded history minus the
+    start point), and ``converged`` is True only when the run ended within
+    ``tol`` of ``x_opt`` — i.e. it actually reached the optimum rather than
+    exhausting its step budget or diverging. Extra kwargs pass straight
+    through to the optimizer (e.g. ``lr=0.001``, ``momentum=0.9``).
+
+    For optimizers with extra positional args (like :func:`newton_vec` which
+    also needs a Hessian), call them directly and format the result with
+    :func:`benchmark_table` instead.
+    """
+    x_final, hist = optim(None, df, x0=x0, tol=tol, steps=steps, **kw)
+    return len(hist) - 1, converged_at_tol(x_final, x_opt)
+
+
+def benchmark_table(results: dict, header="Benchmark (tol=1e-6)") -> str:
+    """Format benchmark rows as a markdown table.
+
+    ``results`` maps label -> (iters, converged). Order of the dict is
+    preserved. Non-converged runs show their iteration count with a ``no`` in
+    the last column so the table stays machine-parseable.
+    """
+    lines = [header, "", "| method | iterations | converged |", "|---|---|---|"]
+    for label, (iters, ok) in results.items():
+        lines.append(f"| {label} | {iters} | {'yes' if ok else 'no'} |")
+    return "\n".join(lines)

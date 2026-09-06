@@ -3,6 +3,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import numpy as np
 from gdviz.optim import (
     adam,
+    benchmark,
+    benchmark_table,
+    converged_at_tol,
     gradient_descent,
     newton,
     grad_quadratic,
@@ -149,3 +152,50 @@ def test_newton_vec_converges_fast_on_rosenbrock():
     x, hist = newton_vec(rosenbrock, grad_rosenbrock, hess_rosenbrock, [0.5, -0.5], steps=50)
     assert np.allclose(x, [1.0, 1.0], atol=1e-6)
     assert len(hist) - 1 <= 15
+
+
+# --- benchmark table ---------------------------------------------------------
+
+def test_converged_at_tol():
+    assert converged_at_tol([1.0, 1.0], [1.0, 1.0])
+    assert converged_at_tol(np.array([0.999999, 1.0000004]), [1.0, 1.0])
+    assert not converged_at_tol([1.0, 1.5], [1.0, 1.0])
+
+
+def test_benchmark_counts_iterations_and_flag():
+    # Momentum converges on the Rosenbrock valley within a 30k budget; the
+    # benchmark reports its step count and flags it converged.
+    iters, ok = benchmark(
+        grad_rosenbrock, gradient_descent_vec, [-1.2, 1.0], [1.0, 1.0],
+        lr=0.001, momentum=0.9, steps=30000,
+    )
+    assert ok
+    assert 0 < iters < 30000
+
+
+def test_benchmark_flags_nonconverged_run():
+    # A tiny step budget exhausts before reaching the optimum; iters equals
+    # the full budget and converged is False.
+    iters, ok = benchmark(
+        grad_rosenbrock, gradient_descent_vec, [-1.2, 1.0], [1.0, 1.0],
+        lr=0.001, steps=50,
+    )
+    assert not ok
+    assert iters == 50
+
+
+def test_benchmark_table_format():
+    results = {
+        "gradient_descent": (28943, True),
+        "gd_momentum_0.9": (3121, True),
+        "newton": (6, True),
+        "diverged_method": (100, False),
+    }
+    table = benchmark_table(results)
+    lines = table.splitlines()
+    assert lines[2] == "| method | iterations | converged |"
+    assert lines[3] == "|---|---|---|"
+    assert "| gradient_descent | 28943 | yes |" in lines
+    assert "| diverged_method | 100 | no |" in lines
+    # dict order is preserved in the output
+    assert [l.split("|")[1].strip() for l in lines[4:]] == list(results)

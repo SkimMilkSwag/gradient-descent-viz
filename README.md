@@ -24,12 +24,19 @@ python -m gdviz
 #     "newton":           {"final_x": 0.0, "iterations": 1}
 #   },
 #   "rosenbrock_2d": {
-#     "start": [-1.2, 1.0],
-#     "gradient_descent": {"final_xy": [0.9999, 0.9997], "iterations": 30000},
-#     "gd_momentum_0.9":  {"final_xy": [1.0, 1.0], "iterations": 4128},
-#     "newton":           {"final_xy": [1.0, 1.0], "iterations": 5}
+#     "gradient_descent": {"iterations": 30000, "converged": true},
+#     "gd_momentum_0.9":  {"iterations": 3020, "converged": true},
+#     "newton":           {"iterations": 5, "converged": true}
 #   }
 # }
+#
+# Benchmark (tol=1e-6)
+#
+# | method             | iterations | converged |
+# |---|---|---|
+# | gradient_descent   | 30000      | yes       |
+# | gd_momentum_0.9    | 3020       | yes       |
+# | newton             | 5          | yes       |
 ```
 
 Generate a convergence plot:
@@ -41,7 +48,7 @@ python -m gdviz.plot
 
 ## What's here
 
-- `gdviz/optim.py` — scalar `gradient_descent` (with optional momentum/velocity), `newton`, plus polynomial bowl helpers; vector `gradient_descent_vec` / `newton_vec`; and the 2D **Rosenbrock** benchmark (`rosenbrock`, `grad_rosenbrock`, `hess_rosenbrock`)
+- `gdviz/optim.py` — scalar `gradient_descent` (with optional momentum/velocity), `newton`, plus polynomial bowl helpers; vector `gradient_descent_vec` / `newton_vec`; the 2D **Rosenbrock** benchmark (`rosenbrock`, `grad_rosenbrock`, `hess_rosenbrock`); and a `benchmark` runner + `benchmark_table` for printing method-vs-iteration-count markdown tables
 - `gdviz/plot.py` — optional convergence plotting (gracefully skipped without matplotlib)
 
 ## Notes

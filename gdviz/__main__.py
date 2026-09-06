@@ -1,11 +1,15 @@
 """Demo: minimize x^2 from x0=5 with GD, momentum-GD and Newton; then run all
-three optimizers on the 2D Rosenbrock benchmark and report convergence."""
+three optimizers on the 2D Rosenbrock benchmark and print a markdown
+convergence table (method, iterations to tol, converged?)."""
 import json
 
 from .optim import (
     gradient_descent,
     newton,
     grad_quadratic,
+    benchmark,
+    benchmark_table,
+    converged_at_tol,
     gradient_descent_vec,
     newton_vec,
     rosenbrock,
@@ -32,18 +36,22 @@ def main():
     # curved valley floor and needs tens of thousands of steps; momentum cuts
     # it to thousands. Newton (Hessian solve) lands in five.
     x0 = [-1.2, 1.0]
-    gd_v, gd_hist_v = gradient_descent_vec(rosenbrock, grad_rosenbrock, x0, lr=0.001, steps=30000)
-    mom_v, mom_hist_v = gradient_descent_vec(
-        rosenbrock, grad_rosenbrock, x0, lr=0.001, momentum=0.9, steps=30000
-    )
+    bench_results = {
+        "gradient_descent": benchmark(grad_rosenbrock, gradient_descent_vec, x0, [1.0, 1.0], lr=0.001, steps=30000),
+        "gd_momentum_0.9": benchmark(
+            grad_rosenbrock, gradient_descent_vec, x0, [1.0, 1.0], lr=0.001, momentum=0.9, steps=30000
+        ),
+    }
+    # Newton needs a Hessian as a separate arg, so call it directly
     nw_v, nw_hist_v = newton_vec(rosenbrock, grad_rosenbrock, hess_rosenbrock, [0.5, -0.5], steps=50)
+    bench_results["newton"] = (len(nw_hist_v) - 1, converged_at_tol(nw_v, [1.0, 1.0]))
     report["rosenbrock_2d"] = {
-        "start": x0,
-        "gradient_descent": {"final_xy": [round(c, 4) for c in gd_v], "iterations": len(gd_hist_v) - 1},
-        "gd_momentum_0.9": {"final_xy": [round(c, 4) for c in mom_v], "iterations": len(mom_hist_v) - 1},
-        "newton": {"final_xy": [round(c, 4) for c in nw_v], "iterations": len(nw_hist_v) - 1},
+        label: {"iterations": iters, "converged": ok}
+        for label, (iters, ok) in bench_results.items()
     }
     print(json.dumps(report, indent=2))
+    print()
+    print(benchmark_table(bench_results))
 
 
 if __name__ == "__main__":
