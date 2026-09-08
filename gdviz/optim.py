@@ -163,6 +163,17 @@ def hess_rosenbrock(x, a=1.0, b=100.0):
                      [-4.0 * b * x, 2.0 * b]])
 
 
+def loss_history(f, trajectory):
+    """Evaluate objective ``f`` at every recorded point in a trajectory.
+
+    ``trajectory`` is the history list returned by any optimizer in this
+    module (a sequence of scalars or arrays, starting from x0). Returns one
+    objective value per point, so the i-th entry is the loss at the i-th
+    iteration — the curve you want on a convergence plot's second axis.
+    """
+    return [float(f(pt)) for pt in trajectory]
+
+
 def converged_at_tol(x_final, x_opt):
     """True when the final state sits within 1e-6 of the optimum coordinate-wise."""
     return bool(np.allclose(np.asarray(x_final, dtype=float),

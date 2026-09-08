@@ -15,6 +15,7 @@ from .optim import (
     rosenbrock,
     grad_rosenbrock,
     hess_rosenbrock,
+    loss_history,
 )
 
 
@@ -52,6 +53,18 @@ def main():
     print(json.dumps(report, indent=2))
     print()
     print(benchmark_table(bench_results))
+
+    # Convergence plot: trajectory on top, objective (log scale) below. The
+    # loss panel is the real signal — x-trajectories look similar for methods
+    # that actually differ in how fast the objective drops.
+    from .plot import plot_convergence
+    trajectories = {
+        "gradient_descent": gd_hist,
+        "gd_momentum_0.9": mom_hist,
+        "newton": nw_hist,
+    }
+    losses = {label: loss_history(lambda x: x ** 2, hist) for label, hist in trajectories.items()}
+    print(plot_convergence(trajectories, out_path="convergence.png", losses=losses))
 
 
 if __name__ == "__main__":

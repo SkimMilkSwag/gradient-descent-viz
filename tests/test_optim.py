@@ -14,6 +14,7 @@ from gdviz.optim import (
     rosenbrock,
     grad_rosenbrock,
     hess_rosenbrock,
+    loss_history,
 )
 
 
@@ -199,3 +200,73 @@ def test_benchmark_table_format():
     assert "| diverged_method | 100 | no |" in lines
     # dict order is preserved in the output
     assert [l.split("|")[1].strip() for l in lines[4:]] == list(results)
+
+
+# --- loss history / overlay ---------------------------------------------------
+
+def test_loss_history_matches_manual_eval():
+    # The loss at each recorded point must equal f(x) evaluated by hand — this
+    # is the curve the plot's second axis draws.
+    _, hist = gradient_descent(lambda x: 0, grad_quadratic, x0=5.0, lr=0.2, steps=10)
+    losses = loss_history(lambda x: x ** 2, hist)
+    assert len(losses) == len(hist)
+    for i, x in enumerate(hist):
+        assert abs(losses[i] - x ** 2) < 1e-9
+
+
+def test_loss_history_monotone_decreasing_on_quadratic():
+    # On a convex bowl with a stable lr the objective must never increase as we
+    # descend; this pins the "loss-vs-iteration" curve the plot is meant to show.
+    _, hist = gradient_descent(lambda x: 0, grad_quadratic, x0=5.0, lr=0.2, steps=50)
+    losses = loss_history(lambda x: x ** 2, hist)
+    for a, b in zip(losses, losses[1:]):
+        assert b <= a + 1e-9
+
+
+def test_loss_history_works_on_vector_trajectory():
+    # The same helper must accept an array-valued trajectory (Rosenbrock run)
+    # and return the objective at each recorded point.
+    _, hist = gradient_descent_vec(rosenbrock, grad_rosenbrock, [-1.2, 1.0], lr=0.001, steps=30)
+    losses = loss_history(rosenbrock, hist)
+    assert len(losses) == len(hist)
+    for i, pt in enumerate(hist):
+        assert abs(losses[i] - rosenbrock(pt)) < 1e-9
+
+
+def test_plot_with_loss_overlay():
+    # The overlay must actually save a file when matplotlib is available. It
+    # degrades to None on systems without it, so guard the real assertions.
+    try:
+        import matplotlib  # noqa: F401
+    except ImportError:
+        import pytest
+        pytest.skip("matplotlib not installed")
+    import os
+
+    from gdviz.plot import plot_convergence
+
+    _, gd = gradient_descent(lambda x: 0, grad_quadratic, x0=5.0, lr=0.2, steps=30)
+    _, nw = newton(lambda x: x ** 2, lambda x: 2 * x, lambda x: 2.0, x0=5.0)
+    histories = {"gd": gd, "newton": nw}
+    losses = {label: loss_history(lambda x: x ** 2, h) for label, h in histories.items()}
+    out = "/tmp/gh_gdviz_overlay_test.png"
+    if os.path.exists(out):
+        os.remove(out)
+    path = plot_convergence(histories, out_path=out, losses=losses)
+    assert path == out
+    assert os.path.exists(out) and os.path.getsize(out) > 0
+
+
+def test_plot_without_loss_keeps_single_panel():
+    # No losses -> the original single-panel trajectory plot, no error.
+    try:
+        import matplotlib  # noqa: F401
+    except ImportError:
+        import pytest
+        pytest.skip("matplotlib not installed")
+    from gdviz.plot import plot_convergence
+
+    _, gd = gradient_descent(lambda x: 0, grad_quadratic, x0=5.0, lr=0.2, steps=20)
+    out = "/tmp/gh_gdviz_traj_test.png"
+    path = plot_convergence({"gd": gd}, out_path=out)
+    assert path == out and os.path.exists(out)
