@@ -24,19 +24,21 @@ python -m gdviz
 #     "newton":           {"final_x": 0.0, "iterations": 1}
 #   },
 #   "rosenbrock_2d": {
-#     "gradient_descent": {"iterations": 30000, "converged": true},
-#     "gd_momentum_0.9":  {"iterations": 3020, "converged": true},
-#     "newton":           {"iterations": 5, "converged": true}
+#     "gradient_descent":   {"iterations": 30000, "converged": true},
+#     "gd_momentum_0.9":    {"iterations": 3020, "converged": true},
+#     "gd_armijo_linesearch": {"iterations": 19435, "converged": true},
+#     "newton":             {"iterations": 5, "converged": true}
 #   }
 # }
 #
 # Benchmark (tol=1e-6)
 #
-# | method             | iterations | converged |
+# | method               | iterations | converged |
 # |---|---|---|
-# | gradient_descent   | 30000      | yes       |
-# | gd_momentum_0.9    | 3020       | yes       |
-# | newton             | 5          | yes       |
+# | gradient_descent     | 30000      | yes       |
+# | gd_momentum_0.9      | 3020       | yes       |
+# | gd_armijo_linesearch | 19435      | yes       |
+# | newton               | 5          | yes       |
 ```
 
 Generate a convergence plot:
@@ -48,7 +50,7 @@ python -m gdviz.plot
 
 ## What's here
 
-- `gdviz/optim.py` — scalar `gradient_descent` (with optional momentum/velocity), `newton`, plus polynomial bowl helpers; vector `gradient_descent_vec` / `newton_vec`; the 2D **Rosenbrock** benchmark (`rosenbrock`, `grad_rosenbrock`, `hess_rosenbrock`); and a `benchmark` runner + `benchmark_table` for printing method-vs-iteration-count markdown tables
+- `gdviz/optim.py` — scalar `gradient_descent` (with optional momentum/velocity), `newton`, plus polynomial bowl helpers; vector `gradient_descent_vec` / `newton_vec`; an **Armijo backtracking line search** (`armijo_alpha`) and a line-search descent runner (`gradient_descent_linesearch`); the 2D **Rosenbrock** benchmark (`rosenbrock`, `grad_rosenbrock`, `hess_rosenbrock`); and a `benchmark` runner + `benchmark_table` for printing method-vs-iteration-count markdown tables
 - `gdviz/plot.py` — optional convergence plotting (gracefully skipped without matplotlib)
 
 ## Notes
@@ -65,6 +67,12 @@ makes plain gradient descent crawl (30k+ iterations to the default tolerance fro
 lands on `(1, 1)` in five. The vector runners stop early when a diverging
 trajectory produces a non-finite gradient, so a bad learning rate can't burn
 through all `steps`.
+
+The Armijo line search is the other antidote to hand-tuned learning rates:
+instead of a fixed step it takes the largest trial step (shrunk geometrically)
+that satisfies the sufficient-decrease condition. On Rosenbrock it still needs
+tens of thousands of steps — the valley floor is genuinely flat — but every step
+is admissible, so it never diverges regardless of the initial trial length.
 
 ## Tests
 
