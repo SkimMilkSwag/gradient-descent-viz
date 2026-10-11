@@ -5,6 +5,7 @@ import json
 
 from .optim import (
     gradient_descent,
+    gradient_descent_linesearch,
     newton,
     grad_quadratic,
     benchmark,
@@ -41,6 +42,9 @@ def main():
         "gradient_descent": benchmark(grad_rosenbrock, gradient_descent_vec, x0, [1.0, 1.0], lr=0.001, steps=30000),
         "gd_momentum_0.9": benchmark(
             grad_rosenbrock, gradient_descent_vec, x0, [1.0, 1.0], lr=0.001, momentum=0.9, steps=30000
+        ),
+        "gd_armijo_linesearch": benchmark(
+            grad_rosenbrock, gradient_descent_linesearch, x0, [1.0, 1.0], lr=1.0, steps=5000
         ),
     }
     # Newton needs a Hessian as a separate arg, so call it directly

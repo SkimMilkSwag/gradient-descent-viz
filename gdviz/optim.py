@@ -51,6 +51,61 @@ def gradient_descent_vec(f, df, x0, lr=0.1, steps=50, tol=1e-8, momentum=0.0):
     return x, history
 
 
+def armijo_alpha(f, x, direction, grad, c1=1e-4, rho=0.5, alpha=1.0, max_iter=60):
+    """Backtracking (Armijo) line search for a fixed search direction.
+
+    Shrinks ``alpha`` by the factor ``rho`` until the Armijo sufficient
+    decrease condition holds:
+
+        f(x + alpha*d) <= f(x) + c1 * grad . d * alpha
+
+    where ``grad . d`` is the directional derivative at ``x``. Returns the
+    accepted step size (never larger than the initial ``alpha``). A line
+    search only makes sense when moving downhill, so ``grad . d < 0`` is a
+    precondition — otherwise every step is uphill and the caller should pick
+    a different direction.
+    """
+    cur = f(x)
+    slope = float(np.dot(np.asarray(grad, dtype=float), np.asarray(direction, dtype=float)))
+    if slope >= 0:
+        raise ValueError("search direction is not descending (grad . d = %r)" % slope)
+    a = float(alpha)
+    for _ in range(max_iter):
+        cand = f(x + a * direction)
+        # A non-finite candidate means the trial step overshot into blowup:
+        # shrink instead of accepting garbage.
+        if np.isfinite(cand) and cand <= cur + c1 * slope * a:
+            return a
+        a *= rho
+    return a
+
+
+def gradient_descent_linesearch(f, df, x0, lr=0.5, steps=50, tol=1e-8,
+                                armijo_c1=1e-4, armijo_rho=0.5):
+    """Gradient descent with an Armijo backtracking line search per step.
+
+    The direction is always ``-grad(x)``; the initial trial step length is
+    ``lr`` and is shrunk by ``armijo_rho`` until the Armijo condition is met
+    (see :func:`armijo_alpha`). The stopping rules match the fixed-step
+    optimizers in this module: stop when the gradient norm drops below
+    ``tol``, on non-finite values, or after ``steps`` iterations.
+
+    Returns ``(x_final, history)`` — the starting point followed by one
+    entry per accepted step — with the same contract as
+    :func:`gradient_descent_vec`.
+    """
+    x = np.asarray(x0, dtype=float).copy()
+    history = [x.copy()]
+    for _ in range(steps):
+        g = np.asarray(df(x), dtype=float)
+        if not np.all(np.isfinite(g)) or np.linalg.norm(g) < tol:
+            break  # diverged to inf/nan, or converged
+        a = armijo_alpha(f, x, -g, g, c1=armijo_c1, rho=armijo_rho, alpha=lr)
+        x = x + a * (-g)
+        history.append(x.copy())
+    return x, history
+
+
 def newton(f, df, d2f, x0, steps=30, tol=1e-8):
     """Newton's method using first and second derivatives."""
     x = float(x0)

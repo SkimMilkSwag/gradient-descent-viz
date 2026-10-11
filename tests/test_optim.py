@@ -1,12 +1,15 @@
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import numpy as np
+import pytest
 from gdviz.optim import (
     adam,
+    armijo_alpha,
     benchmark,
     benchmark_table,
     converged_at_tol,
     gradient_descent,
+    gradient_descent_linesearch,
     newton,
     grad_quadratic,
     gradient_descent_vec,
@@ -145,6 +148,65 @@ def test_gd_vec_stops_on_divergence():
     # infinity; the runner must break on non-finite gradient, not loop forever.
     x, hist = gradient_descent_vec(rosenbrock, grad_rosenbrock, [-1.0, 2.0], lr=0.01, steps=1000)
     assert len(hist) < 1000  # stopped early rather than burning all steps
+
+
+# --- Armijo backtracking line search ----------------------------------------
+
+def test_armijo_alpha_accepts_immediate_step_when_condition_holds():
+    # x0=1 on the quadratic bowl: any step a < 1 decreases f, so a trial of
+    # 0.5 satisfies the Armijo condition immediately and no shrinkage occurs.
+    a = armijo_alpha(lambda x: x[0] ** 2, np.array([1.0]), -np.array([grad_quadratic(1.0)]),
+                     grad_quadratic(1.0), alpha=0.5)
+    assert a == 0.5
+
+
+def test_armijo_alpha_shrinks_until_satisfied():
+    # An initial step past the stability bound (x^2 stable for lr < 1) fails
+    # the Armijo condition and must be halved until it fits.
+    x = np.array([5.0])
+    g = grad_quadratic(5.0)
+    a = armijo_alpha(lambda x: x[0] ** 2, x, -np.array([g]), g, alpha=1.2)
+    assert a < 1.2
+    # the accepted step must satisfy the sufficient-decrease inequality
+    cur = float(x[0] ** 2)
+    slope = float(np.dot(np.array([g]), -np.array([g])))
+    assert (x[0] + a * (-g)) ** 2 <= cur + 1e-4 * slope * a
+
+
+def test_armijo_alpha_rejects_non_descending_direction():
+    # Moving uphill (grad . d > 0) is a precondition violation, not something
+    # the shrink loop can fix.
+    with pytest.raises(ValueError):
+        armijo_alpha(lambda x: x[0] ** 2, np.array([5.0]),
+                     np.array([1.0]), grad_quadratic(5.0), alpha=1.0)
+
+
+def test_linesearch_converges_on_quadratic():
+    x, hist = gradient_descent_linesearch(lambda x: x[0] ** 2,
+                                          lambda x: 2.0 * np.array([x[0]]),
+                                          [-5.0], lr=1.2, steps=200)
+    assert abs(x[0]) < 1e-3
+    assert len(hist) > 1
+
+
+def test_linesearch_more_steps_than_fixed_gd_on_rosenbrock():
+    # Fixed-step GD at a stable lr crawls the valley; Armijo keeps taking the
+    # largest admissible step, so it needs fewer accepted iterations to tol.
+    _, fixed = gradient_descent_vec(rosenbrock, grad_rosenbrock, [-1.2, 1.0],
+                                    lr=0.001, steps=30000)
+    _, ls = gradient_descent_linesearch(rosenbrock, grad_rosenbrock, [-1.2, 1.0],
+                                        lr=1.0, steps=5000)
+    assert len(ls) - 1 < len(fixed) - 1
+
+
+def test_linesearch_converges_on_rosenbrock():
+    # The line search keeps every step admissible, so the run reaches (1, 1)
+    # instead of crawling the valley like fixed-step GD.
+    x_final, hist = gradient_descent_linesearch(rosenbrock, grad_rosenbrock, [-1.2, 1.0],
+                                                lr=1.0, tol=1e-8, steps=50000)
+    iters = len(hist) - 1
+    assert converged_at_tol(x_final, [1.0, 1.0])
+    assert 0 < iters < 50000
 
 
 def test_newton_vec_converges_fast_on_rosenbrock():
