@@ -26,7 +26,8 @@ python -m gdviz
 #   "rosenbrock_2d": {
 #     "gradient_descent":   {"iterations": 30000, "converged": true},
 #     "gd_momentum_0.9":    {"iterations": 3020, "converged": true},
-#     "gd_armijo_linesearch": {"iterations": 19435, "converged": true},
+#     "gd_armijo_linesearch": {"iterations": 5000, "converged": false},
+#     "l_bfgs":             {"iterations": 63, "converged": true},
 #     "newton":             {"iterations": 5, "converged": true}
 #   }
 # }
@@ -37,7 +38,8 @@ python -m gdviz
 # |---|---|---|
 # | gradient_descent     | 30000      | yes       |
 # | gd_momentum_0.9      | 3020       | yes       |
-# | gd_armijo_linesearch | 19435      | yes       |
+# | gd_armijo_linesearch | 5000       | no        |
+# | l_bfgs               | 63         | yes       |
 # | newton               | 5          | yes       |
 ```
 
@@ -50,7 +52,7 @@ python -m gdviz.plot
 
 ## What's here
 
-- `gdviz/optim.py` — scalar `gradient_descent` (with optional momentum/velocity), `newton`, plus polynomial bowl helpers; vector `gradient_descent_vec` / `newton_vec`; an **Armijo backtracking line search** (`armijo_alpha`) and a line-search descent runner (`gradient_descent_linesearch`); the 2D **Rosenbrock** benchmark (`rosenbrock`, `grad_rosenbrock`, `hess_rosenbrock`); and a `benchmark` runner + `benchmark_table` for printing method-vs-iteration-count markdown tables
+- `gdviz/optim.py` — scalar `gradient_descent` (with optional momentum/velocity), `newton`, plus polynomial bowl helpers; vector `gradient_descent_vec` / `newton_vec`; an **Armijo backtracking line search** (`armijo_alpha`) and a line-search descent runner (`gradient_descent_linesearch`); **L-BFGS** from scratch (two-loop recursion + Armijo line search, `l_bfgs`); the 2D **Rosenbrock** benchmark (`rosenbrock`, `grad_rosenbrock`, `hess_rosenbrock`); and a `benchmark` runner + `benchmark_table` for printing method-vs-iteration-count markdown tables
 - `gdviz/plot.py` — optional convergence plotting (gracefully skipped without matplotlib)
 
 ## Notes
@@ -73,6 +75,13 @@ instead of a fixed step it takes the largest trial step (shrunk geometrically)
 that satisfies the sufficient-decrease condition. On Rosenbrock it still needs
 tens of thousands of steps — the valley floor is genuinely flat — but every step
 is admissible, so it never diverges regardless of the initial trial length.
+
+L-BFGS sits between first- and second-order: it approximates the inverse
+Hessian from recent gradient differences (two-loop recursion, O(m*d) memory,
+no Hessian evaluations) and pairs each quasi-Newton direction with an Armijo
+line search. On Rosenbrock from `[-1.2, 1.0]` it lands on `(1, 1)` in ~60
+iterations — thousands of times fewer than plain descent, using only gradient
+information, at the cost of a line search per step.
 
 ## Tests
 

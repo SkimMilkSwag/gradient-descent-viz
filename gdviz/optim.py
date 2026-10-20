@@ -146,6 +146,99 @@ def newton_vec(f, df, hess, x0, steps=30, tol=1e-8):
     return x, history
 
 
+def _l_bfgs_two_loop(pairs: list, g: np.ndarray) -> np.ndarray:
+    """L-BFGS two-loop recursion (Nocedal & Wright, eq. 8.34-8.35).
+
+    Given the most recent ``pairs`` of (s_i, y_i) — steps and gradient
+    differences — and the current gradient ``g``, returns the L-BFGS search
+    direction ``d = -B_k^{-1} g`` where B_k is the implicit limited-memory
+    Hessian approximation. With an empty history it degenerates to steepest
+    descent (``-g``), which is exactly what a fresh run should do.
+
+    Memory cost is O(m*d): only the ``m`` most recent pairs are kept, so the
+    method approximates full BFGS without ever forming the d x d matrix.
+    """
+    n = len(pairs)
+    if n == 0:
+        return -g
+    ys = [p[1] for p in pairs]
+    ss = [p[0] for p in pairs]
+    rhos = [p[2] for p in pairs]
+
+    # backward loop: r_i = y_{i-1} + (rho_{i-1} * s_{i-1} . r_i) * ...
+    alphas = [0.0] * n
+    r = g.copy()
+    for i in range(n - 1, -1, -1):
+        alphas[i] = rhos[i] * float(np.dot(ss[i], r))
+        r = r - alphas[i] * ys[i]
+
+    # initial Hessian inverse scale gamma: (s_{last} . y_{last}) / (y_{last} . y_{last})
+    s_last, y_last = ss[-1], ys[-1]
+    yy = float(np.dot(y_last, y_last))
+    gamma = float(np.dot(s_last, y_last)) / yy if yy > 0 else 1.0
+    q = gamma * r
+
+    # forward loop: s_i + (alpha_i - rho_i * y_i . q) ...
+    for i in range(n):
+        beta = rhos[i] * float(np.dot(ys[i], q))
+        q = q + (alphas[i] - beta) * ss[i]
+
+    return -q
+
+
+def l_bfgs(f, df, x0, steps=100, tol=1e-6, m=10):
+    """L-BFGS with Armijo backtracking line search.
+
+    Signature matches :func:`gradient_descent_vec`: ``f`` is the objective,
+    ``df`` its gradient, ``x0`` the start point (a vector). Each iteration:
+
+    1. build the search direction with :func:`_l_bfgs_two_loop`,
+    2. accept a step along it via :func:`armijo_alpha` (with a steepest-
+       descent fallback if the quasi-Newton direction is not descending —
+       the inverse-Hessian approximation is only locally valid),
+    3. record the (s, y) pair in a circular buffer capped at ``m`` entries;
+       pairs with y . s <= 0 are skipped (no curvature information).
+
+    Stopping rules match the other optimizers: gradient norm below ``tol``,
+    non-finite values, or the step budget. Returns ``(x_final, history)`` —
+    the start point followed by one entry per accepted step.
+    """
+    x = np.asarray(x0, dtype=float).copy()
+    g = np.asarray(df(x), dtype=float)
+    history = [x.copy()]
+
+    pairs: list[tuple[np.ndarray, np.ndarray, float]] = []  # (s, y, rho)
+
+    for _ in range(steps):
+        if not np.all(np.isfinite(g)) or np.linalg.norm(g) < tol:
+            break
+
+        d = _l_bfgs_two_loop(pairs, g)
+        slope = float(np.dot(g, d))
+        # the two-loop direction should be descending; if the implicit
+        # approximation went stale, fall back to steepest descent
+        if slope >= 0 or not np.all(np.isfinite(d)):
+            d = -g
+
+        a = armijo_alpha(f, x, d, g, alpha=0.5)
+        x_new = x + a * d
+        g_new = np.asarray(df(x_new), dtype=float)
+        if not np.all(np.isfinite(g_new)):
+            break  # the step overshot into blowup; stop rather than record garbage
+
+        s = x_new - x
+        y = g_new - g
+        sy = float(np.dot(y, s))
+        if sy > 1e-12:
+            pairs.append((s, y, 1.0 / sy))
+            if len(pairs) > m:
+                pairs.pop(0)
+
+        x, g = x_new, g_new
+        history.append(x.copy())
+    return x, history
+
+
 def adam(f, df, x0, lr=0.1, steps=50, tol=1e-8,
          beta1=0.9, beta2=0.999, eps=1e-8):
     """Adam (Kingma & Ba 2014) implemented from scratch for the scalar bowl.

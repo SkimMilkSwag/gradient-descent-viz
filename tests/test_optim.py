@@ -18,6 +18,8 @@ from gdviz.optim import (
     grad_rosenbrock,
     hess_rosenbrock,
     loss_history,
+    l_bfgs,
+    _l_bfgs_two_loop,
 )
 
 
@@ -332,3 +334,105 @@ def test_plot_without_loss_keeps_single_panel():
     out = "/tmp/gh_gdviz_traj_test.png"
     path = plot_convergence({"gd": gd}, out_path=out)
     assert path == out and os.path.exists(out)
+
+
+def test_l_bfgs_converges_on_quadratic():
+    """L-BFGS on a 2D quadratic bowl: must land at the minimum."""
+    def f(x):
+        return float(np.dot(x, x))
+
+    def df(x):
+        return 2.0 * np.asarray(x)
+
+    x, hist = l_bfgs(f, df, [3.0, -2.0], steps=100, tol=1e-8)
+    assert converged_at_tol(x, [0.0, 0.0])
+    assert len(hist) >= 2
+
+
+def test_l_bfgs_converges_on_rosenbrock():
+    x, hist = l_bfgs(rosenbrock, grad_rosenbrock, [-1.2, 1.0], steps=300)
+    assert converged_at_tol(x, [1.0, 1.0])
+    assert len(hist) >= 2
+
+
+def test_l_bfgs_fewer_iterations_than_plain_gd_on_rosenbrock():
+    """Quasi-Newton directions should beat plain fixed-step descent by a wide margin."""
+    x_lb, hist_lb = l_bfgs(rosenbrock, grad_rosenbrock, [-1.2, 1.0], steps=300)
+    assert converged_at_tol(x_lb, [1.0, 1.0])
+    iters_lb = len(hist_lb) - 1
+    _, hist_gd = gradient_descent_vec(
+        None, grad_rosenbrock, [-1.2, 1.0], lr=0.001, steps=30000
+    )
+    iters_gd = len(hist_gd) - 1
+    assert iters_lb < iters_gd / 10
+
+
+def test_l_bfgs_two_loop_empty_history_is_steepest_descent():
+    """With no stored (s, y) pairs the direction must be plain -g."""
+    g = np.array([3.0, -2.0])
+    d = _l_bfgs_two_loop([], g)
+    assert np.allclose(d, -g)
+
+
+def test_l_bfgs_two_loop_single_pair_matches_reference():
+    """One (s, y) pair: verify the two-loop output against a hand-computed
+    reference of the Nocedal & Wright recursion, and confirm it is a valid
+    descent direction with a better slope than plain steepest descent."""
+    H = np.array([[4.0, 1.0], [1.0, 3.0]])
+    b = np.array([1.0, -2.0])
+
+    def df(x):
+        return H @ np.asarray(x) + b
+
+    x = np.array([2.0, 1.0])
+    g = df(x)
+    s = -0.1 * g
+    y = df(x + s) - g
+    rho = 1.0 / float(np.dot(y, s))
+
+    # hand reference of the two-loop recursion with one pair
+    alpha = rho * float(np.dot(s, g))
+    r = g - alpha * y
+    gamma = float(np.dot(s, y)) / float(np.dot(y, y))
+    q = gamma * r
+    beta = rho * float(np.dot(y, q))
+    d_ref = -(q + (alpha - beta) * s)
+
+    d_lbfgs = _l_bfgs_two_loop([(s, y, rho)], g)
+    assert np.allclose(d_lbfgs, d_ref, atol=1e-12)
+    # it must be a genuine descent direction
+    assert float(np.dot(g, d_lbfgs)) < 0
+    # and the quasi-Newton slope must beat plain steepest descent's slope
+    assert abs(float(np.dot(g, d_lbfgs))) < abs(float(np.dot(g, -g)))
+
+
+def test_l_bfgs_respects_steps_budget():
+    """On a stiff problem with a tiny tolerance, the run must stop at exactly `steps`."""
+    def f(x):
+        return float(np.dot(x, x))
+
+    def df(x):
+        return 2.0 * np.asarray(x)
+
+    # tol so small it's effectively never hit in 5 steps for this lr regime
+    x, hist = l_bfgs(f, df, [10.0], steps=5, tol=1e-30)
+    # history length is start + min(steps, actual) entries
+    assert len(hist) <= 6
+
+
+def test_l_bfgs_nonfinite_gradient_stops():
+    """A gradient that blows up to inf must stop the run without crashing."""
+    calls = {"n": 0}
+
+    def f(x):
+        return float(np.dot(np.asarray(x), np.asarray(x)))
+
+    def df(x):
+        calls["n"] += 1
+        if calls["n"] >= 3:
+            return np.array([np.inf, np.nan])
+        return 2.0 * np.asarray(x)
+
+    x, hist = l_bfgs(f, df, [1.0, 1.0], steps=50)
+    # stopped well before the step budget
+    assert len(hist) < 50

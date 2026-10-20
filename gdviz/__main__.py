@@ -16,6 +16,7 @@ from .optim import (
     rosenbrock,
     grad_rosenbrock,
     hess_rosenbrock,
+    l_bfgs,
     loss_history,
 )
 
@@ -38,15 +39,26 @@ def main():
     # curved valley floor and needs tens of thousands of steps; momentum cuts
     # it to thousands. Newton (Hessian solve) lands in five.
     x0 = [-1.2, 1.0]
+    # benchmark() passes the objective through as None (the vector optimizers
+    # only need the gradient), but the line-search variant evaluates f for its
+    # Armijo test — so it gets rosenbrock explicitly.
     bench_results = {
         "gradient_descent": benchmark(grad_rosenbrock, gradient_descent_vec, x0, [1.0, 1.0], lr=0.001, steps=30000),
         "gd_momentum_0.9": benchmark(
             grad_rosenbrock, gradient_descent_vec, x0, [1.0, 1.0], lr=0.001, momentum=0.9, steps=30000
         ),
-        "gd_armijo_linesearch": benchmark(
-            grad_rosenbrock, gradient_descent_linesearch, x0, [1.0, 1.0], lr=1.0, steps=5000
-        ),
     }
+    ls_x, ls_hist = gradient_descent_linesearch(rosenbrock, grad_rosenbrock, x0, lr=1.0, steps=5000)
+    bench_results["gd_armijo_linesearch"] = (
+        len(ls_hist) - 1,
+        converged_at_tol(ls_x, [1.0, 1.0]),
+    )
+    # L-BFGS takes (f, df) like the other vector optimizers — but benchmark()
+    # passes the gradient as its first arg, so call it directly here, the same
+    # way Newton is handled below. Two-loop recursion + Armijo line search;
+    # should land near Newton's iteration count using only gradients.
+    lb_x, lb_hist = l_bfgs(rosenbrock, grad_rosenbrock, x0, steps=300)
+    bench_results["l_bfgs"] = (len(lb_hist) - 1, converged_at_tol(lb_x, [1.0, 1.0]))
     # Newton needs a Hessian as a separate arg, so call it directly
     nw_v, nw_hist_v = newton_vec(rosenbrock, grad_rosenbrock, hess_rosenbrock, [0.5, -0.5], steps=50)
     bench_results["newton"] = (len(nw_hist_v) - 1, converged_at_tol(nw_v, [1.0, 1.0]))
