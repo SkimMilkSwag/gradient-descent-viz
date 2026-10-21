@@ -89,6 +89,20 @@ information, at the cost of a line search per step.
 python -m pytest tests/ -v
 ```
 
+## Plotting
+
+Two plot modules, both optional (skipped gracefully without matplotlib):
+
+- `gdviz/plot.py` — convergence *curves*: the x-trajectory plus an objective-vs-iteration panel (`plot_convergence`).
+- `gdviz/contour.py` — the objective itself as a **2D filled contour** with each optimizer's recorded trajectory overlaid (`contour_plot`). On Rosenbrock this makes the iteration gap between crawling fixed-step descent and line-search / L-BFGS runs visible at a glance: one method leaves thousands of evenly spaced dots tracing the valley floor, the other reaches the minimum in a handful. Run it directly for a ready-made comparison plot:
+
+```bash
+python -m gdviz.contour
+# -> rosenbrock_contour.png (fixed-step GD vs GD+Armijo line search vs L-BFGS on the Rosenbrock surface)
+```
+
+Non-finite surface values are masked before plotting so blowup outside the interesting region doesn't stretch the color scale, and 1-D (scalar-problem) trajectories are skipped when overlaying a 2D surface.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
