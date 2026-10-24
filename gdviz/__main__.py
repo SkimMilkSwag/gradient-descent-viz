@@ -13,6 +13,7 @@ from .optim import (
     converged_at_tol,
     gradient_descent_vec,
     newton_vec,
+    newton_vec_damped,
     rosenbrock,
     grad_rosenbrock,
     hess_rosenbrock,
@@ -59,6 +60,11 @@ def main():
     # should land near Newton's iteration count using only gradients.
     lb_x, lb_hist = l_bfgs(rosenbrock, grad_rosenbrock, x0, steps=300)
     bench_results["l_bfgs"] = (len(lb_hist) - 1, converged_at_tol(lb_x, [1.0, 1.0]))
+    # Damped (line-search) Newton: same Hessian solves, but the step is
+    # shrunk until it satisfies Armijo — so it converges from starts where
+    # raw Newton's full step overshoots into the non-convex region.
+    dn_x, dn_hist = newton_vec_damped(rosenbrock, grad_rosenbrock, hess_rosenbrock, x0, steps=200)
+    bench_results["newton_damped"] = (len(dn_hist) - 1, converged_at_tol(dn_x, [1.0, 1.0]))
     # Newton needs a Hessian as a separate arg, so call it directly
     nw_v, nw_hist_v = newton_vec(rosenbrock, grad_rosenbrock, hess_rosenbrock, [0.5, -0.5], steps=50)
     bench_results["newton"] = (len(nw_hist_v) - 1, converged_at_tol(nw_v, [1.0, 1.0]))

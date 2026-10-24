@@ -40,6 +40,7 @@ python -m gdviz
 # | gd_momentum_0.9      | 3020       | yes       |
 # | gd_armijo_linesearch | 5000       | no        |
 # | l_bfgs               | 63         | yes       |
+# | newton_damped        | 21         | yes       |
 # | newton               | 5          | yes       |
 ```
 
@@ -52,7 +53,7 @@ python -m gdviz.plot
 
 ## What's here
 
-- `gdviz/optim.py` — scalar `gradient_descent` (with optional momentum/velocity), `newton`, plus polynomial bowl helpers; vector `gradient_descent_vec` / `newton_vec`; an **Armijo backtracking line search** (`armijo_alpha`) and a line-search descent runner (`gradient_descent_linesearch`); **L-BFGS** from scratch (two-loop recursion + Armijo line search, `l_bfgs`); the 2D **Rosenbrock** benchmark (`rosenbrock`, `grad_rosenbrock`, `hess_rosenbrock`); and a `benchmark` runner + `benchmark_table` for printing method-vs-iteration-count markdown tables
+- `gdviz/optim.py` — scalar `gradient_descent` (with optional momentum/velocity), `newton`, plus polynomial bowl helpers; vector `gradient_descent_vec` / `newton_vec`; an **Armijo backtracking line search** (`armijo_alpha`) and a line-search descent runner (`gradient_descent_linesearch`); **L-BFGS** from scratch (two-loop recursion + Armijo line search, `l_bfgs`); **damped Newton** with an Armijo step size (`newton_vec_damped`, steepest-descent fallback when the Hessian is indefinite at the current point); the 2D **Rosenbrock** benchmark (`rosenbrock`, `grad_rosenbrock`, `hess_rosenbrock`); and a `benchmark` runner + `benchmark_table` for printing method-vs-iteration-count markdown tables
 - `gdviz/plot.py` — optional convergence plotting (gracefully skipped without matplotlib)
 
 ## Notes
@@ -82,6 +83,14 @@ no Hessian evaluations) and pairs each quasi-Newton direction with an Armijo
 line search. On Rosenbrock from `[-1.2, 1.0]` it lands on `(1, 1)` in ~60
 iterations — thousands of times fewer than plain descent, using only gradient
 information, at the cost of a line search per step.
+
+Damped (line-search) Newton is the other end of the same tradeoff: it uses
+the exact Hessian like Newton, but shrinks each Newton step with the Armijo
+test until the sufficient-decrease condition holds (`newton_vec_damped`). The
+result is a run that never diverges on non-convex regions where raw Newton's
+full step overshoots — on Rosenbrock it converges from `[-1.2, 1.0]` in ~20
+iterations, roughly 3x faster than L-BFGS while paying for one Hessian solve
+per step instead of a line search.
 
 ## Tests
 
