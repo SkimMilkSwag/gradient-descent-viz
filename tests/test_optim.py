@@ -14,6 +14,7 @@ from gdviz.optim import (
     grad_quadratic,
     gradient_descent_vec,
     newton_vec,
+    newton_vec_damped,
     rosenbrock,
     grad_rosenbrock,
     hess_rosenbrock,
@@ -217,6 +218,84 @@ def test_newton_vec_converges_fast_on_rosenbrock():
     x, hist = newton_vec(rosenbrock, grad_rosenbrock, hess_rosenbrock, [0.5, -0.5], steps=50)
     assert np.allclose(x, [1.0, 1.0], atol=1e-6)
     assert len(hist) - 1 <= 15
+
+
+# --- Damped (line-search) Newton -------------------------------------------
+
+def test_newton_damped_converges_on_quadratic():
+    """On a convex quadratic with a PD Hessian, damped Newton should match
+    raw Newton's behavior: the Armijo condition accepts the full step (alpha=1),
+    so it lands on the minimum in the same handful of iterations."""
+    def f(x):
+        return float(np.dot(x, x))
+
+    def df(x):
+        return 2.0 * np.asarray(x)
+
+    def H(x):
+        return 2.0 * np.eye(2)
+
+    x, hist = newton_vec_damped(f, df, H, [3.0, -2.0], steps=50)
+    assert converged_at_tol(x, [0.0, 0.0])
+    # a full Newton step on a quadratic is exact: convergence in ~1-2 steps
+    assert len(hist) - 1 <= 3
+
+
+def test_newton_damped_converges_on_rosenbrock():
+    """Damped Newton from the standard benchmark start: the line search keeps
+    every step admissible even where the Hessian is indefinite, so the run
+    reaches (1, 1) without diverging."""
+    x, hist = newton_vec_damped(rosenbrock, grad_rosenbrock, hess_rosenbrock,
+                                [-1.2, 1.0], steps=500)
+    assert converged_at_tol(x, [1.0, 1.0])
+    assert len(hist) >= 2
+
+
+def test_newton_damped_fewer_iterations_than_plain_gd_on_rosenbrock():
+    """Quasi-Newton/second-order directions beat fixed-step descent even with
+    a line search — damped Newton should need orders of magnitude fewer steps
+    than plain GD to reach the optimum on Rosenbrock."""
+    x_dn, hist_dn = newton_vec_damped(rosenbrock, grad_rosenbrock, hess_rosenbrock,
+                                      [-1.2, 1.0], steps=500)
+    assert converged_at_tol(x_dn, [1.0, 1.0])
+    iters_dn = len(hist_dn) - 1
+    _, hist_gd = gradient_descent_vec(
+        None, grad_rosenbrock, [-1.2, 1.0], lr=0.001, steps=30000
+    )
+    iters_gd = len(hist_gd) - 1
+    assert iters_dn < iters_gd / 10
+
+
+def test_newton_damped_falls_back_to_steepest_descent_when_hessian_indefinite():
+    """Where the Hessian is indefinite the full Newton direction is not
+    descending, so the damped runner must detect slope >= 0 and take a
+    steepest-descent step that iteration. On Rosenbrock the start [-1.2, 1.5]
+    is exactly such a point (verified below: g . (-H^{-1} g) > 0 there), so
+    the very first accepted move comes from the fallback branch — and the run
+    still converges to (1, 1)."""
+    x0 = np.array([-1.2, 1.5])
+    g = grad_rosenbrock(x0)
+    newton_dir = -np.linalg.solve(hess_rosenbrock(x0), g)
+    # precondition: the full Newton direction is non-descending here, so the
+    # fallback must fire on iteration 0
+    assert float(np.dot(g, newton_dir)) >= 0.0
+
+    x, hist = newton_vec_damped(rosenbrock, grad_rosenbrock, hess_rosenbrock,
+                                [-1.2, 1.5], steps=500)
+    assert converged_at_tol(x, [1.0, 1.0])
+    # the run actually stepped (fallback + subsequent Newton steps both taken)
+    assert len(hist) > 3
+
+
+def test_newton_damped_objective_nonincreasing():
+    """Every accepted step satisfies the Armijo sufficient-decrease condition,
+    so the objective along the trajectory must never increase (up to float
+    noise) — the guarantee that distinguishes damped Newton from raw Newton."""
+    _, hist = newton_vec_damped(rosenbrock, grad_rosenbrock, hess_rosenbrock,
+                                [-1.2, 1.0], steps=200)
+    losses = [float(rosenbrock(pt)) for pt in hist]
+    for a, b in zip(losses, losses[1:]):
+        assert b <= a + 1e-9, (a, b)
 
 
 # --- benchmark table ---------------------------------------------------------

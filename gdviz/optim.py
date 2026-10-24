@@ -146,6 +146,53 @@ def newton_vec(f, df, hess, x0, steps=30, tol=1e-8):
     return x, history
 
 
+def newton_vec_damped(f, df, hess, x0, steps=50, tol=1e-8, max_alpha=1.0,
+                      armijo_c1=1e-4, armijo_rho=0.5):
+    """Damped (line-search) Newton: take alpha * H^{-1} g with an Armijo step.
+
+    Raw Newton can overshoot badly when the Hessian is not positive definite
+    at the current point — the classic failure on Rosenbrock, where the
+    curvature of the valley flips sign far from the minimum. Damped Newton
+    fixes this by treating the full Newton direction ``d = -H^{-1} g`` as a
+    search direction and shrinking it (via :func:`armijo_alpha`) until the
+    sufficient-decrease condition holds, so every accepted step provably
+    decreases the objective.
+
+    If the Newton direction is not descending (which happens when H has a
+    negative eigenvalue that dominates), the line search falls back to
+    steepest descent ``-g`` for that iteration — same fallback :func:`l_bfgs`
+    uses when its implicit approximation goes stale.
+
+    Signature and history contract match :func:`newton_vec`; the stopping
+    rules (gradient norm below ``tol``, non-finite values, step budget) are
+    identical, so it drops into the benchmark table as a direct comparison
+    against raw Newton. Returns ``(x_final, history)``.
+    """
+    x = np.asarray(x0, dtype=float).copy()
+    history = [x.copy()]
+    for _ in range(steps):
+        g = np.asarray(df(x), dtype=float)
+        if not np.all(np.isfinite(g)) or np.linalg.norm(g) < tol:
+            break  # diverged or converged
+        H = np.asarray(hess(x), dtype=float)
+        if not np.all(np.isfinite(H)):
+            break
+        try:
+            step = -np.linalg.solve(H, g)  # search direction (sign-flipped Newton step)
+        except np.linalg.LinAlgError:
+            break
+        slope = float(np.dot(g, step))
+        if not np.all(np.isfinite(step)) or slope >= 0.0:
+            # Hessian not positive definite here: full Newton step is uphill.
+            # Steepest descent is always descending and keeps the run alive.
+            step = -g
+        a = armijo_alpha(f, x, step, g, c1=armijo_c1, rho=armijo_rho,
+                         alpha=max_alpha)
+        x = x + a * step
+        history.append(x.copy())
+    return x, history
+
+
 def _l_bfgs_two_loop(pairs: list, g: np.ndarray) -> np.ndarray:
     """L-BFGS two-loop recursion (Nocedal & Wright, eq. 8.34-8.35).
 
