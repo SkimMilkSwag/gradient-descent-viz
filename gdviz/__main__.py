@@ -1,8 +1,7 @@
-"""Demo: minimize x^2 from x0=5 with GD, momentum-GD and Newton; then run all
-three optimizers on the 2D Rosenbrock benchmark and print a markdown
-convergence table (method, iterations to tol, converged?)."""
+"""Demo: minimize x^2 from x0=5 with GD, momentum-GD, Adam and Newton; then run all four optimizers on the 2D Rosenbrock benchmark and print a markdown convergence table (method, iterations to tol, converged?)."""
 import json
 
+from .adam import adam_vec
 from .optim import (
     gradient_descent,
     gradient_descent_linesearch,
@@ -28,10 +27,14 @@ def main():
         lambda x: 0, grad_quadratic, x0=5.0, lr=0.2, momentum=0.9, steps=40
     )
     nw_x, nw_hist = newton(lambda x: x ** 2, lambda x: 2 * x, lambda x: 2.0, x0=5.0)
+    ad_x, ad_hist = adam_vec(
+        lambda x: float(x[0] ** 2), lambda x: [2.0 * x[0]], [5.0], lr=0.1, steps=400
+    )
     report = {
         "quadratic_bowl": {
             "gradient_descent": {"final_x": round(gd_x, 6), "iterations": len(gd_hist) - 1},
             "gd_momentum_0.9": {"final_x": round(mom_x, 6), "iterations": len(mom_hist) - 1},
+            "adam": {"final_x": round(float(ad_x[0]), 6), "iterations": len(ad_hist) - 1},
             "newton": {"final_x": round(nw_x, 6), "iterations": len(nw_hist) - 1},
         },
     }
@@ -49,6 +52,11 @@ def main():
             grad_rosenbrock, gradient_descent_vec, x0, [1.0, 1.0], lr=0.001, momentum=0.9, steps=30000
         ),
     }
+    # Adam: bias-corrected per-coordinate adaptation. No line search — the
+    # adaptive step size is the whole point — so it sits between momentum-GD
+    # and L-BFGS on this benchmark: faster than raw descent, still far from
+    # quasi-Newton territory.
+    bench_results["adam"] = benchmark(grad_rosenbrock, adam_vec, x0, [1.0, 1.0], lr=0.02, steps=30000)
     ls_x, ls_hist = gradient_descent_linesearch(rosenbrock, grad_rosenbrock, x0, lr=1.0, steps=5000)
     bench_results["gd_armijo_linesearch"] = (
         len(ls_hist) - 1,
