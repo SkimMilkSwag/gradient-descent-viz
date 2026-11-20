@@ -19,11 +19,11 @@ pip install -e .[plot]      # + matplotlib for convergence plots
 python -m gdviz
 # {
 #   "quadratic_bowl": {
-#     "gradient_descent": {"final_x": 0.0, "iterations": 40},
-#     "gd_momentum_0.9":  {"final_x": 0.0, "iterations": 2},
-#     "adam":             {"final_x": 0.0, "iterations": 358},
-#     "rmsprop":          {"final_x": 0.0, "iterations": 94},
-#     "newton":           {"final_x": 0.0, "iterations": 1}
+#     "gd":             {"final_x": 0.0, "iterations": 40},
+#     "gd_momentum_0.9":{"final_x": 0.0, "iterations": 2},
+#     "adam":           {"final_x": 0.0, "iterations": 358},
+#     "rmsprop":        {"final_x": 0.0, "iterations": 94},
+#     "newton":         {"final_x": 0.0, "iterations": 1}
 #   },
 #   "rosenbrock_2d": {
 #     "gradient_descent":   {"iterations": 30000, "converged": true},
@@ -56,6 +56,22 @@ Generate a convergence plot:
 python -m gdviz.plot
 # -> convergence.png
 ```
+
+### Choosing which methods to run on the scalar bowl
+
+The demo's quadratic-bowl section accepts `--optimizer` (repeatable) to restrict
+which methods it runs — useful when iterating on one optimizer or printing a
+smaller report. The Rosenbrock benchmark table always shows every method:
+
+```bash
+python -m gdviz --optimizer newton                  # one method
+python -m gdviz --optimizer adam --optimizer rmsprop # several
+# choices: adam, gd, gd_momentum_0.9, newton, rmsprop
+```
+
+Without the flag the demo runs all five, as before. Passing the same
+`--optimizer` twice is an error (it would double-count the run), and an
+unrecognized choice falls out of argparse's `choices` list with a usage message.
 
 ## What's here
 
