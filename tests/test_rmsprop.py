@@ -1,6 +1,7 @@
 """Tests for gdviz.rmsprop — RMSProp (root mean square propagation) optimizer."""
 import os
 import sys
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
@@ -139,3 +140,60 @@ def test_rmsprop_via_benchmark_helper():
                                  lr=0.1, steps=20000)
     assert converged
     assert 1 < iters < 20000
+
+
+# --- demo CLI (--optimizer flag) -----------------------------------------
+
+
+def _cli_report(argv):
+    """Run the demo main() with argv and return its quadratic_bowl report dict."""
+    from gdviz.__main__ import main
+
+    captured = {}
+
+    def fake_dumps(obj, *a, **k):
+        captured["report"] = obj
+        return "captured"
+
+    with mock.patch("gdviz.__main__.json.dumps", side_effect=fake_dumps), \
+         mock.patch("gdviz.__main__.print"):
+        main(argv)
+    return captured["report"]["quadratic_bowl"]
+
+
+def test_cli_defaults_to_all_optimizers():
+    report = _cli_report([])
+    assert set(report) == {"gd", "gd_momentum_0.9", "adam", "rmsprop", "newton"}
+
+
+def test_cli_single_optimizer_selects_only_that_method():
+    report = _cli_report(["--optimizer", "rmsprop"])
+    assert set(report) == {"rmsprop"}
+
+
+def test_cli_repeatable_flag_selects_multiple_methods():
+    report = _cli_report(["--optimizer", "newton", "--optimizer", "gd"])
+    assert set(report) == {"newton", "gd"}
+
+
+def test_cli_duplicate_optimizer_is_an_error(capsys):
+    with pytest.raises(SystemExit) as exc:
+        _cli_report(["--optimizer", "adam", "--optimizer", "adam"])
+    assert exc.value.code != 0
+    err = capsys.readouterr().err
+    assert "--optimizer given more than once" in err
+
+
+def test_cli_unknown_optimizer_is_an_error(capsys):
+    with pytest.raises(SystemExit) as exc:
+        _cli_report(["--optimizer", "sgd"])
+    assert exc.value.code != 0
+    assert "invalid choice" in capsys.readouterr().err
+
+
+def test_cli_selected_methods_report_the_same_numbers_as_full_run():
+    full = _cli_report([])
+    partial = _cli_report(["--optimizer", "newton"])
+    for name in partial:
+        assert partial[name] == full[name]
+
