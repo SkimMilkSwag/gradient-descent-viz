@@ -1,4 +1,5 @@
 """Demo: minimize x^2 from x0=5 with GD, momentum-GD, Adam, RMSProp and Newton; then run all methods on the 2D Rosenbrock benchmark and print a markdown convergence table (method, iterations to tol, converged?)."""
+import argparse
 import json
 
 from .adam import adam_vec
@@ -22,30 +23,56 @@ from .optim import (
 )
 
 
-def main():
-    gd_x, gd_hist = gradient_descent(lambda x: 0, grad_quadratic, x0=5.0, lr=0.2, steps=40)
-    mom_x, mom_hist = gradient_descent(
+OPTIMIZERS = {
+    "gd": lambda: gradient_descent(lambda x: 0, grad_quadratic, x0=5.0, lr=0.2, steps=40),
+    "gd_momentum_0.9": lambda: gradient_descent(
         lambda x: 0, grad_quadratic, x0=5.0, lr=0.2, momentum=0.9, steps=40
-    )
-    nw_x, nw_hist = newton(lambda x: x ** 2, lambda x: 2 * x, lambda x: 2.0, x0=5.0)
-    ad_x, ad_hist = adam_vec(
+    ),
+    "adam": lambda: adam_vec(
         lambda x: float(x[0] ** 2), lambda x: [2.0 * x[0]], [5.0], lr=0.1, steps=400
-    )
+    ),
     # RMSProp on the scalar bowl: the raw-gradient step is ~lr per iteration
     # (normalized by the constant-gradient RMS), so it needs ~50x more steps
     # than Adam's momentum-corrected variant to grind 5.0 down to tol.
-    rp_x, rp_hist = rmsprop_vec(
+    "rmsprop": lambda: rmsprop_vec(
         lambda x: float(x[0] ** 2), lambda x: [2.0 * x[0]], [5.0], lr=0.1, steps=4000
+    ),
+    "newton": lambda: newton(lambda x: x**2, lambda x: 2 * x, lambda x: 2.0, x0=5.0),
+}
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument(
+        "--optimizer",
+        action="append",
+        choices=sorted(OPTIMIZERS),
+        dest="optimizers",
+        default=None,
+        help=(
+            "method(s) to run on the scalar x^2 bowl (repeatable); "
+            f"choices: {', '.join(sorted(OPTIMIZERS))}; default: all"
+        ),
     )
-    report = {
-        "quadratic_bowl": {
-            "gradient_descent": {"final_x": round(gd_x, 6), "iterations": len(gd_hist) - 1},
-            "gd_momentum_0.9": {"final_x": round(mom_x, 6), "iterations": len(mom_hist) - 1},
-            "adam": {"final_x": round(float(ad_x[0]), 6), "iterations": len(ad_hist) - 1},
-            "rmsprop": {"final_x": round(float(rp_x[0]), 6), "iterations": len(rp_hist) - 1},
-            "newton": {"final_x": round(nw_x, 6), "iterations": len(nw_hist) - 1},
-        },
-    }
+    args = parser.parse_args(argv)
+
+    if args.optimizers is None:
+        selected = list(OPTIMIZERS)
+    elif len(args.optimizers) != len(set(args.optimizers)):
+        dupes = sorted({o for o in args.optimizers if args.optimizers.count(o) > 1})
+        parser.error(f"--optimizer given more than once: {', '.join(dupes)}")
+    else:
+        selected = args.optimizers
+
+    runs = {name: OPTIMIZERS[name]() for name in selected}
+    report = {"quadratic_bowl": {}}
+    for name in selected:
+        x_final, hist = runs[name]
+        x_val = float(x_final[0]) if hasattr(x_final, "__len__") else float(x_final)
+        report["quadratic_bowl"][name] = {
+            "final_x": round(x_val, 6),
+            "iterations": len(hist) - 1,
+        }
 
     # Rosenbrock 2D benchmark: minimum at (1, 1). Plain descent crawls the
     # curved valley floor and needs tens of thousands of steps; momentum cuts
@@ -102,11 +129,7 @@ def main():
     # loss panel is the real signal — x-trajectories look similar for methods
     # that actually differ in how fast the objective drops.
     from .plot import plot_convergence
-    trajectories = {
-        "gradient_descent": gd_hist,
-        "gd_momentum_0.9": mom_hist,
-        "newton": nw_hist,
-    }
+    trajectories = {name: hist for name, (_, hist) in runs.items()}
     losses = {label: loss_history(lambda x: x ** 2, hist) for label, hist in trajectories.items()}
     print(plot_convergence(trajectories, out_path="convergence.png", losses=losses))
 
